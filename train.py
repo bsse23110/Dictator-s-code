@@ -104,6 +104,11 @@ def main(data_path: str = "data/KaggleV2-May-2016.csv"):
     print("\n[2/5] Engineering features...")
     feats, _ = engineer_features(df_clean, is_train=True)
 
+    # Save preprocessed data -------------------------------------------
+    out_path = os.path.join(os.path.dirname(data_path), "preprocessed_data.csv")
+    feats.to_csv(out_path, index=False)
+    print(f"[train] Preprocessed data saved to: {out_path}")
+
     # 3. Train / test split --------------------------------------------
     print("\n[3/5] Splitting data...")
     X = feats.drop(columns=[TARGET_COL])
