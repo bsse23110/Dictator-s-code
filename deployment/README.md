@@ -1,0 +1,201 @@
+# Hospital No-Show Predictor — Deployment Guide
+
+## Architecture Overview
+
+```
+┌────────────────────────────────────────────────────────┐
+│                    Client Browser                       │
+│              http://noshow-app.eba-xxx.us-east-1.      │
+│              elasticbeanstalk.com                       │
+└──────────────────────┬─────────────────────────────────┘
+                       │ HTTPS (port 443)
+                       ▼
+┌────────────────────────────────────────────────────────┐
+│            AWS Elastic Beanstalk (Linux/ECS)            │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │              Docker Container                     │  │
+│  │  ┌────────────────┐  ┌─────────────────────────┐ │  │
+│  │  │  React SPA      │  │  FastAPI Backend        │ │  │
+│  │  │  (Vite build)   │  │  /predict  /health      │ │  │
+│  │  │  → served as    │  │  XGBoost Model          │ │  │
+│  │  │    static files  │  │  Neighbourhood Encoder  │ │  │
+│  │  └────────────────┘  └─────────────────────────┘ │  │
+│  └──────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────┘
+                       ▲
+                       │ Docker image push
+                       │ (GitHub Actions automates this)
+┌────────────────────────────────────────────────────────┐
+│              Amazon ECR (Container Registry)            │
+│    noshow-predictor:latest                              │
+└────────────────────────────────────────────────────────┘
+                       ▲
+                       │ trigger on git push
+┌────────────────────────────────────────────────────────┐
+│              GitHub Actions (CI/CD Pipeline)            │
+│    .github/workflows/deploy.yml                         │
+│    Build → Push to ECR → Deploy to EB                  │
+└────────────────────────────────────────────────────────┘
+```
+
+### Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| ML Model | XGBoost (tuned, AUC-ROC 0.75) |
+| Backend | FastAPI (Python 3.10) |
+| Frontend | React 18 + TypeScript + Vite |
+| Styling | Tailwind CSS (shadcn/ui style) |
+| Container | Docker (multi-stage build) |
+| CI/CD | GitHub Actions (auto-build, push to ECR, deploy to EB) |
+| Deployment | AWS Elastic Beanstalk + ECR |
+
+---
+
+## Local Run Instructions
+
+### Prerequisites
+- Python 3.10+
+- Node.js 20+
+- pip and npm
+
+### 1. Install Backend Dependencies
+
+```bash
+cd /path/to/Dictator-s-code-main
+pip install -r requirements.txt fastapi uvicorn
+```
+
+### 2. Start Backend
+
+```bash
+uvicorn api.main:app --reload --port 8000
+```
+
+The API will be available at `http://localhost:8000`.
+- Health check: `http://localhost:8000/health`
+- Swagger docs: `http://localhost:8000/docs`
+
+### 3. Install Frontend Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 4. Start Frontend (Development)
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend: `http://localhost:5173`
+API calls are proxied to `http://localhost:8000` automatically.
+
+### 5. Build Frontend for Production
+
+```bash
+cd frontend
+npm run build
+```
+
+The built files go to `frontend/dist/`. The FastAPI server will serve these as static files.
+
+---
+
+## Docker Build Instructions
+
+### Build the Image
+
+```bash
+docker build -t noshow-predictor .
+```
+
+This runs a multi-stage build:
+1. **Stage 1**: Builds the React frontend with Vite
+2. **Stage 2**: Creates a Python image with FastAPI + model + built frontend
+
+### Run the Container
+
+```bash
+docker run -p 8000:8000 noshow-predictor
+```
+
+Visit `http://localhost:8000` — you should see the full application.
+
+### Using Docker Compose
+
+```bash
+docker compose up --build
+```
+
+---
+
+## Model Files Required
+
+The following files must be present in `models/` directory before building:
+
+| File | Description |
+|------|-------------|
+| `best_xgb_latest.pkl` | Trained XGBoost model (joblib) |
+| `neighbourhood_encoder.pkl` | Fitted neighbourhood encoder |
+| `metadata.pkl` | Feature order, names, and config |
+
+These are generated by the training pipeline (`src/tune_xgb.py` + the encoder script).
+
+---
+
+## Architecture Notes
+
+### Feature Engineering Pipeline
+
+When a prediction request arrives:
+1. Raw patient data is validated (Pydantic)
+2. Temporal features are computed (lead_time, is_weekend, etc.)
+3. Age group is binned
+4. Historical no-show rate is calculated from input
+5. Neighbourhood is target-encoded using saved encoder
+6. All 17 features are assembled in exact training order
+7. XGBoost model returns probability
+
+### CORS Configuration
+
+The API allows requests from any origin (`allow_origins=["*"]`). For production, restrict this to your actual domain.
+
+---
+
+## GitHub Actions CI/CD
+
+Every push to `main` triggers an automated pipeline defined in `.github/workflows/deploy.yml`:
+
+```
+git push → GitHub Actions
+           ├── Checkout code
+           ├── Configure AWS credentials (from Secrets)
+           ├── Login to Amazon ECR
+           ├── Build Docker image & push to ECR
+           ├── Generate Dockerrun.aws.json
+           └── Deploy to Elastic Beanstalk
+```
+
+### Setup (One-Time)
+
+1. Add these GitHub Secrets (Settings → Secrets → Actions):
+   - `AWS_ACCESS_KEY_ID`
+   - `AWS_SECRET_ACCESS_KEY`
+   - `AWS_REGION` = `us-east-1`
+
+2. Create the EB environment once: `eb create noshow-prod`
+
+After that, every `git push` auto-deploys. No manual commands needed.
+
+### Manual Trigger
+
+Go to GitHub → Actions → "Deploy to AWS Elastic Beanstalk" → Run workflow.
+
+### Security Notes
+
+- No authentication is implemented — this is a demo/educational project
+- Add API keys or JWT for production use
+- The model files are included in the Docker image (~10 MB total)

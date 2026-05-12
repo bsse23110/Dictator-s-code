@@ -13,7 +13,18 @@ from mlflow_logger import setup_experiment, MLflowRun
 from cv_utils import run_cv
 from optuna.integration.mlflow import MLflowCallback
 
-def _build_objective(X_tr, y_tr):
+def _detect_tree_method() -> str:
+    """Return 'gpu_hist' if CUDA is available, else 'hist'."""
+    try:
+        xgb_train = xgb.train
+        _tmp = xgb.DMatrix(np.array([[0.0]]), label=np.array([0]))
+        xgb_train({"tree_method": "gpu_hist"}, _tmp)
+        return "gpu_hist"
+    except Exception:
+        return "hist"
+
+
+def _build_objective(X_tr, y_tr, tree_method: str):
     base_scale = (y_tr == 0).sum() / (y_tr == 1).sum()
 
     def objective(trial):
@@ -29,8 +40,8 @@ def _build_objective(X_tr, y_tr):
             "scale_pos_weight":  base_scale,
             "random_state":      cfg.RANDOM_STATE,
             "verbosity":         0,
-            "tree_method":       "hist",   # ✅ 3-5x faster on tabular data
-            "eval_metric":       "auc",    # ✅ Aligns early stopping with Optuna objective
+            "tree_method":       tree_method,
+            "eval_metric":       "auc",
         }
 
         cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=cfg.RANDOM_STATE)
@@ -70,6 +81,10 @@ def main():
     # 2️⃣ Setup MLflow
     setup_experiment()
 
+    # 2.5 Detect GPU
+    xgb_tree_method = _detect_tree_method()
+    print(f"  [XGBoost] tree_method: {xgb_tree_method}")
+
     # 3️⃣ Optimize
     study = optuna.create_study(
         direction="maximize",
@@ -77,7 +92,7 @@ def main():
     )
     mlflow_cb = MLflowCallback()
     study.optimize(
-        _build_objective(X_tr, y_tr),
+        _build_objective(X_tr, y_tr, xgb_tree_method),
         n_trials=cfg.OPTUNA_TRIALS_XGB,
         callbacks=[mlflow_cb],
         show_progress_bar=True
@@ -88,7 +103,7 @@ def main():
 
     # 4️⃣ Held-out Val Check (unseen by Optuna)
     best_params = study.best_params.copy()
-    best_params.update({"random_state": cfg.RANDOM_STATE, "verbosity": 0, "tree_method": "hist", "eval_metric": "auc"})
+    best_params.update({"random_state": cfg.RANDOM_STATE, "verbosity": 0, "tree_method": xgb_tree_method, "eval_metric": "auc"})
 
     probe_model = XGBClassifier(**best_params)
     probe_model.fit(X_tr, y_tr)

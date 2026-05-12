@@ -38,6 +38,10 @@ class MLflowRun:
     def log_params(self, params):
         mlflow.log_params(params)
 
+    def log_artifact(self, path):
+        mlflow.log_artifact(path)
+        print(f"[MLflow] Logged artifact: {path}")
+
     def log_metrics(self, metrics, step=None):
         mlflow.log_metrics(metrics, step=step)
 

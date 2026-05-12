@@ -9,11 +9,11 @@ splits the data, then trains and evaluates three baseline classifiers:
   3. XGBoost
 
 Outputs a clean results table with AUC-ROC, F1, Precision, and Recall
-for each model, ready for Rafey to pick up and tune with Optuna + MLflow.
+for each model.
 
 Usage
 -----
-    python src/train.py [path/to/KaggleV2-May-2016.csv]
+    python train.py [path/to/KaggleV2-May-2016.csv]
 
 If no path is given, defaults to data/KaggleV2-May-2016.csv
 """
@@ -35,6 +35,8 @@ from sklearn.metrics         import (
     recall_score,
     classification_report,
 )
+
+# XGBoost with GPU support via tree_method='gpu_hist'
 from xgboost import XGBClassifier
 
 warnings.filterwarnings("ignore")
@@ -53,10 +55,8 @@ RANDOM_STATE  = 42
 TEST_SIZE     = 0.20          # 80 / 20 split
 TARGET_COL    = "no_show"
 
-# Columns that should NOT be scaled (binary flags, ordinals, encoded rates
-# are fine to pass through a scaler, but keeping it explicit helps clarity)
-# Actually we scale everything for LR; tree models don't need it but it
-# doesn't hurt either, so we use the same matrix for all three.
+# GPU flag — True to enable CUDA for XGBoost (requires xgboost built with GPU)
+USE_GPU = True
 
 
 # ---------------------------------------------------------------------------
@@ -68,13 +68,17 @@ def evaluate(name: str, model, X_test: np.ndarray, y_test: np.ndarray) -> dict:
     y_pred  = model.predict(X_test)
     y_proba = model.predict_proba(X_test)[:, 1]
 
-    metrics = {
+    return {
         "model":     name,
         "AUC-ROC":   round(roc_auc_score(y_test, y_proba),    4),
         "F1":        round(f1_score(y_test, y_pred),           4),
         "Precision": round(precision_score(y_test, y_pred),    4),
         "Recall":    round(recall_score(y_test, y_pred),       4),
     }
+
+
+def print_evaluation(name: str, metrics: dict, y_test, y_pred):
+    """Pretty-print evaluation results."""
     print(f"\n{'='*50}")
     print(f"  {name}")
     print(f"{'='*50}")
@@ -84,7 +88,6 @@ def evaluate(name: str, model, X_test: np.ndarray, y_test: np.ndarray) -> dict:
     print(f"  Recall   : {metrics['Recall']}")
     print("\n" + classification_report(y_test, y_pred,
                                        target_names=["Showed Up", "No-Show"]))
-    return metrics
 
 
 # ---------------------------------------------------------------------------
@@ -100,25 +103,36 @@ def main(data_path: str = "data/KaggleV2-May-2016.csv"):
     print("\n[1/5] Loading and cleaning data...")
     df_clean = load_and_clean(data_path)
 
-    # 2. Feature engineering -------------------------------------------
-    print("\n[2/5] Engineering features...")
-    feats, _ = engineer_features(df_clean, is_train=True)
-
-    # Save preprocessed data -------------------------------------------
-    out_path = os.path.join(os.path.dirname(data_path), "preprocessed_data.csv")
-    feats.to_csv(out_path, index=False)
-    print(f"[train] Preprocessed data saved to: {out_path}")
-
-    # 3. Train / test split --------------------------------------------
-    print("\n[3/5] Splitting data...")
-    X = feats.drop(columns=[TARGET_COL])
-    y = feats[TARGET_COL]
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+    # 2. Split BEFORE feature engineering (avoids target leakage) -------
+    print("\n[2/5] Splitting data (BEFORE feature engineering)...")
+    df_train, df_test = train_test_split(
+        df_clean, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=df_clean[TARGET_COL]
     )
-    print(f"  Train size : {X_train.shape[0]:,}  ({y_train.mean():.2%} no-show)")
-    print(f"  Test  size : {X_test.shape[0]:,}  ({y_test.mean():.2%} no-show)")
+    print(f"  Train size : {df_train.shape[0]:,}  ({df_train[TARGET_COL].mean():.2%} no-show)")
+    print(f"  Test  size : {df_test.shape[0]:,}  ({df_test[TARGET_COL].mean():.2%} no-show)")
+
+    # 3. Feature engineering — fit on train, transform on test ----------
+    print("\n[3/5] Engineering features...")
+    feats_train, encoder = engineer_features(df_train, is_train=True)
+    feats_test, _        = engineer_features(df_test, neighbourhood_encoder=encoder, is_train=False)
+    print(f"  Train features shape: {feats_train.shape}")
+    print(f"  Test  features shape: {feats_test.shape}")
+
+    # Also engineer full dataset for saving (used by src/ tuning pipeline)
+    # Note: neighbourhood encoder is fitted on full data here — the src/
+    # pipeline re-splits and uses leakage_check.py to validate.
+    feats_full, _ = engineer_features(df_clean, is_train=True)
+
+    os.makedirs("data", exist_ok=True)
+    out_path = "data/preprocessed_data.csv"
+    feats_full.to_csv(out_path, index=False)
+    print(f"[train] Full preprocessed data saved to: {out_path}")
+
+    # Separate X and y -----------------------------------------------
+    X_train = feats_train.drop(columns=[TARGET_COL])
+    y_train = feats_train[TARGET_COL]
+    X_test  = feats_test.drop(columns=[TARGET_COL])
+    y_test  = feats_test[TARGET_COL]
     print(f"  Features   : {X_train.shape[1]}")
 
     # 4. Scale (needed for Logistic Regression) ------------------------
@@ -135,12 +149,14 @@ def main(data_path: str = "data/KaggleV2-May-2016.csv"):
     print("Training Logistic Regression...")
     lr = LogisticRegression(
         max_iter=1000,
-        class_weight="balanced",   # handle class imbalance
+        class_weight="balanced",
         random_state=RANDOM_STATE,
         solver="lbfgs",
     )
     lr.fit(X_train_sc, y_train)
-    results.append(evaluate("Logistic Regression", lr, X_test_sc, y_test))
+    m = evaluate("Logistic Regression", lr, X_test_sc, y_test)
+    results.append(m)
+    print_evaluation("Logistic Regression", m, y_test, lr.predict(X_test_sc))
 
     # ---- Random Forest ----------------------------------------------
     print("Training Random Forest...")
@@ -152,27 +168,50 @@ def main(data_path: str = "data/KaggleV2-May-2016.csv"):
         n_jobs=-1,
     )
     rf.fit(X_train, y_train)
-    results.append(evaluate("Random Forest", rf, X_test, y_test))
+    m = evaluate("Random Forest", rf, X_test, y_test)
+    results.append(m)
+    print_evaluation("Random Forest", m, y_test, rf.predict(X_test))
 
     # ---- XGBoost ----------------------------------------------------
     print("Training XGBoost...")
-    # scale_pos_weight handles imbalance for XGBoost
     neg, pos     = (y_train == 0).sum(), (y_train == 1).sum()
     scale_weight = neg / pos
 
-    xgb = XGBClassifier(
+    # Use GPU if available, fall back to CPU
+    if USE_GPU:
+        try:
+            import xgboost as xgb
+            # Quick check: try creating a tiny DMatrix on GPU
+            _ = xgb.DMatrix(np.array([[0.0]]), label=np.array([0]))
+            _ = xgb.train({"tree_method": "gpu_hist"}, _)
+            tree_method = "gpu_hist"
+            device = "cuda"
+            print("  [XGBoost] GPU (CUDA) enabled.")
+        except Exception:
+            tree_method = "hist"
+            device = "cpu"
+            print("  [XGBoost] GPU not available — falling back to CPU.")
+    else:
+        tree_method = "hist"
+        device = "cpu"
+        print("  [XGBoost] GPU disabled (USE_GPU = False). Running on CPU.")
+
+    xgb_model = XGBClassifier(
         n_estimators=200,
         max_depth=6,
         learning_rate=0.1,
         scale_pos_weight=scale_weight,
         random_state=RANDOM_STATE,
-        use_label_encoder=False,
         eval_metric="logloss",
         verbosity=0,
         n_jobs=-1,
+        tree_method=tree_method,
+        device=device,
     )
-    xgb.fit(X_train, y_train)
-    results.append(evaluate("XGBoost", xgb, X_test, y_test))
+    xgb_model.fit(X_train, y_train)
+    m = evaluate("XGBoost", xgb_model, X_test, y_test)
+    results.append(m)
+    print_evaluation("XGBoost", m, y_test, xgb_model.predict(X_test))
 
     # 6. Summary table -------------------------------------------------
     print("\n" + "="*60)
@@ -184,8 +223,8 @@ def main(data_path: str = "data/KaggleV2-May-2016.csv"):
     print(f"\n  Best model by AUC-ROC: {best} ({summary.loc[best, 'AUC-ROC']})")
     print("="*60 + "\n")
 
-    # 7. Feature importance (Random Forest) for Rafey ------------------
-    feat_names = X.columns.tolist()
+    # 7. Feature importance (Random Forest) ----------------------------
+    feat_names = X_train.columns.tolist()
     importances = pd.Series(rf.feature_importances_, index=feat_names)
     print("Top 10 features (Random Forest importance):")
     print(importances.sort_values(ascending=False).head(10).to_string())

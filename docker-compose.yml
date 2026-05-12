@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: noshow-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  # For development: run frontend with Vite HMR
+  # Uncomment and use 'docker compose up' for full-stack local dev
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile.dev
+  #   container_name: noshow-frontend
+  #   ports:
+  #     - "5173:5173"
+  #   volumes:
+  #     - ./frontend/src:/app/src
+  #   depends_on:
+  #     - backend

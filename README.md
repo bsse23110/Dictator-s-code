@@ -3,9 +3,14 @@
 
 | File | What it does |
 |------|-------------|
-| `src/preprocessing.py` | Loads raw CSV, cleans column names, fixes data issues, encodes target |
-| `src/feature_engineering.py` | Builds all engineered features from the clean DataFrame |
-| `src/train.py` | Runs the full pipeline and trains LR, Random Forest, XGBoost |
+| `preprocessing.py` | Loads raw CSV, cleans column names, fixes data issues, encodes target |
+| `feature_engineering.py` | Builds all engineered features from the clean DataFrame |
+| `train.py` | Runs the full pipeline and trains LR, Random Forest, XGBoost |
+| `src/config.py` | Centralized paths, seeds, hyperparameter constants |
+| `src/data_split.py` | Deterministic train/val/test splitting |
+| `src/tune_rf.py` | Optuna hyperparameter tuning for Random Forest |
+| `src/tune_xgb.py` | Optuna hyperparameter tuning for XGBoost (with GPU support) |
+| `src/evaluate.py` | Final evaluation on the held-out test set |
 | `data/KaggleV2-May-2016.csv` | Raw dataset (not committed — keep locally) |
 
 ---
@@ -13,8 +18,8 @@
 ## How to Run
 
 ```bash
-pip install pandas numpy scikit-learn xgboost
-python src/train.py data/KaggleV2-May-2016.csv
+pip install -r requirements.txt
+python train.py data/KaggleV2-May-2016.csv
 ```
 
 ---
