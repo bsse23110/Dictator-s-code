@@ -52,16 +52,9 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          cat > Dockerrun.aws.json <<EOF2
-          {
-            "AWSEBDockerrunVersion": "1",
-            "Image": {
-              "Name": "$ECR_REGISTRY/$ECR_REPOSITORY:latest",
-              "Update": "true"
-            },
-            "Ports": [{ "ContainerPort": 8000, "HostPort": 80 }]
-          }
-          EOF2
+          printf '{"AWSEBDockerrunVersion":"1","Image":{"Name":"%s/%s:latest","Update":"true"},"Ports":[{"ContainerPort":8000,"HostPort":80}]}' \
+            "$ECR_REGISTRY" "$ECR_REPOSITORY" > Dockerrun.aws.json
+          cat Dockerrun.aws.json
 
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
@@ -75,6 +68,7 @@ jobs:
           region: ${{ env.AWS_REGION }}
           deployment_package: Dockerrun.aws.json
           use_existing_version_if_available: true
+          wait_for_environment_recovery: 60
 
       - name: Print Deployed URL
-        run: echo "🌐 http://noshow-prod-v2.us-east-1.elasticbeanstalk.com"
+        run: echo "Live at http://noshow-prod-v2.us-east-1.elasticbeanstalk.com"
