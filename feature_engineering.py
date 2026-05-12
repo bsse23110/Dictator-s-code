@@ -1,32 +1,4 @@
-"""
-feature_engineering.py
------------------------
-Transforms the cleaned DataFrame (output of preprocessing.load_and_clean)
-into a model-ready feature matrix.
 
-Features created
-----------------
-Temporal
-  lead_time            : days between booking and appointment (int)
-  is_weekend           : appointment falls on Sat/Sun (bool → int)
-  appointment_weekday  : 0=Mon … 6=Sun (int, for tree models)
-  scheduled_month      : month the appointment was booked (int)
-  appointment_month    : month the appointment takes place (int)
-
-Patient demographics
-  age_group            : ordinal bucket (0=child,1=teen,2=adult,3=senior)
-
-Historical behaviour  (computed on training data only; mapped to test)
-  previous_no_show_rate : fraction of *past* appointments the patient missed
-  previous_appointments : number of prior records for this patient
-
-Neighbourhood
-  neighbourhood_no_show_rate : mean no-show rate per neighbourhood
-                                (target-encoded; fitted on train, applied to test)
-
-All original cleaned columns except raw dates, patient_id, and neighbourhood
-string are retained.
-"""
 
 import pandas as pd
 import numpy as np

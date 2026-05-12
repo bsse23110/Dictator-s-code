@@ -1,9 +1,3 @@
-"""
-api/model_loader.py
--------------------
-Loads the trained XGBoost model, NeighbourhoodEncoder, and metadata
-for inference. Call load_artifacts() once at startup.
-"""
 
 import joblib
 import os

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>No-Show Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:#f8fafc;color:#0f172a;min-height:100vh}
+.main{max-width:1100px;margin:0 auto;padding:40px 24px;width:100%}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:#fff;border-radius:16px;border:1px solid #e2e8f0;padding:28px;box-shadow:0 1px 3px rgba(0,0,0,.04),0 4px 12px rgba(0,0,0,.04)}
+.card h2{font-size:20px;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:8px}
+.card h2 svg{width:20px;height:20px;color:#2563eb}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:13px;font-weight:500;color:#64748b;margin-bottom:5px}
+.form-group label svg{width:14px;height:14px;vertical-align:-2px;margin-right:3px}
+.toggle-group{display:flex;gap:8px}
+.toggle-btn{padding:7px 16px;border-radius:10px;border:1px solid transparent;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;background:#f1f5f9;color:#0f172a}
+.toggle-btn.active{background:#2563eb;color:#fff;box-shadow:0 2px 8px rgba(37,99,235,.3)}
+.toggle-btn:hover:not(.active){background:#e2e8f0}
+.check-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.check-btn{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;border:1px solid transparent;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;background:#f1f5f9;color:#64748b}
+.check-btn.active{background:#eff6ff;color:#2563eb;border-color:#bfdbfe}
+.check-btn .box{width:16px;height:16px;border-radius:4px;border:2px solid #94a3b8;display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .15s}
+.check-btn.active .box{background:#2563eb;border-color:#2563eb;color:#fff}
+input[type="range"]{width:100%;accent-color:#2563eb}
+input[type="date"],input[type="number"],select{width:100%;padding:9px 12px;border-radius:10px;border:1px solid #e2e8f0;font-size:14px;font-family:inherit;background:#fff;transition:border .15s}
+input:focus,select:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.date-row,.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.submit-btn{padding:10px 24px;border:none;border-radius:10px;background:#2563eb;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:6px;box-shadow:0 2px 8px rgba(37,99,235,.25)}
+.submit-btn:hover{background:#1d4ed8}
+.submit-btn:disabled{opacity:.6;cursor:not-allowed}
+.submit-btn .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top:2px solid #fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.result-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;color:#64748b;text-align:center}
+.result-empty svg{width:48px;height:48px;margin-bottom:12px}
+.result-empty p{font-weight:500}
+.result-empty span{font-size:13px;margin-top:4px}
+.error-msg{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px;color:#dc2626;font-size:14px}
+.result-content{animation:fadeIn .4s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.risk-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.risk-badge{padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px}
+.risk-low{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+.risk-medium{background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+.risk-high{background:#fef2f2;color:#dc2626;border:1px solid #fecaca}
+.prob-pct{text-align:right}
+.prob-pct .num{font-size:28px;font-weight:700;color:#0f172a}
+.prob-pct .lbl{font-size:12px;color:#64748b}
+.gauge{display:flex;flex-direction:column;align-items:center;margin-bottom:16px}
+.gauge svg{width:140px;height:140px;transform:rotate(-90deg)}
+.gauge-labels{display:flex;justify-content:space-between;width:160px;font-size:11px;color:#94a3b8;margin-top:4px}
+.explanation-box{padding:16px;border-radius:12px;border:1px solid;font-size:14px;display:flex;gap:10px;align-items:flex-start;margin-bottom:16px}
+.explanation-box svg{width:18px;height:18px;flex-shrink:0;margin-top:1px}
+.exp-low{background:#f0fdf4;border-color:#bbf7d0}
+.exp-low svg{color:#15803d}
+.exp-medium{background:#fffbeb;border-color:#fde68a}
+.exp-medium svg{color:#b45309}
+.exp-high{background:#fef2f2;border-color:#fecaca}
+.exp-high svg{color:#dc2626}
+details{margin-top:4px}
+summary{font-size:13px;color:#64748b;cursor:pointer}
+.features-panel{background:#f1f5f9;border-radius:10px;padding:12px 16px;margin-top:8px;max-height:200px;overflow-y:auto;font-size:12px;font-family:monospace}
+.features-panel .feat-row{display:flex;justify-content:space-between;padding:3px 0}
+.features-panel .feat-key{color:#64748b}
+.features-panel .feat-val{font-weight:600}
+</style>
+</head>
+<body>
+
+<main class="main">
+  <div class="grid">
+    <!-- FORM -->
+    <form class="card" id="predictForm">
+      <h2><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg> Patient Information</h2>
+
+      <div class="form-group">
+        <label><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/></svg> Gender</label>
+        <div class="toggle-group" id="genderGroup">
+          <button type="button" class="toggle-btn active" data-value="0">Male</button>
+          <button type="button" class="toggle-btn" data-value="1">Female</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Age: <strong id="ageVal">35</strong></label>
+        <input type="range" id="age" min="0" max="100" value="35">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8"><span>0</span><span>100</span></div>
+      </div>
+
+      <div class="form-group">
+        <label>Medical Conditions</label>
+        <div class="check-grid" id="checkGrid">
+          <button type="button" class="check-btn" data-key="scholarship"><span class="box"></span> Scholarship</button>
+          <button type="button" class="check-btn" data-key="hypertension"><span class="box"></span> Hypertension</button>
+          <button type="button" class="check-btn" data-key="diabetes"><span class="box"></span> Diabetes</button>
+          <button type="button" class="check-btn" data-key="alcoholism"><span class="box"></span> Alcoholism</button>
+          <button type="button" class="check-btn" data-key="handicap"><span class="box"></span> Handicap</button>
+          <button type="button" class="check-btn active" data-key="sms_received"><span class="box">&#10003;</span> SMS Received</button>
+        </div>
+      </div>
+
+      <div class="date-row">
+        <div class="form-group">
+          <label><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg> Scheduled Date</label>
+          <input type="date" id="scheduled_date">
+        </div>
+        <div class="form-group">
+          <label><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg> Appointment Date</label>
+          <input type="date" id="appointment_date">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg> Neighbourhood</label>
+        <select id="neighbourhood"></select>
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>Previous Appointments</label>
+          <input type="number" id="previous_appointments" min="0" value="0">
+        </div>
+        <div class="form-group">
+          <label>Previous No-Shows</label>
+          <input type="number" id="previous_no_shows" min="0" value="0">
+        </div>
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
+    </form>
+
+    <!-- RESULT -->
+    <div class="card" id="resultCard">
+      <h2><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg> Prediction Result</h2>
+      <div id="resultArea">
+        <div class="result-empty">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
+          <p>Fill in the form and click "Submit"</p>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const NH = ["AEROPORTO","ANDORINHAS","ANTONIO HONORIO","ARIOVALDO FAVALESSA","BARRO VERMELHO","BELA VISTA","BENTO FERREIRA","BOA VISTA","BONFIM","CARATOIRA","CENTRO","COMDUSA","CONQUISTA","CONSOLACAO","CRUZAMENTO","DA PENHA","DE LOURDES","DO CABRAL","DO MOSCOSO","DO QUADRO","ENSEADA DO SUA","ESTRELINHA","FONTE GRANDE","FORTE SAO JOAO","FRADINHOS","GOIABEIRAS","GRANDE VITORIA","GURIGICA","HORTO","ILHA DAS CAIEIRAS","ILHA DE SANTA MARIA","ILHA DO BOI","ILHA DO FRADE","ILHA DO PRINCIPE","ILHAS OCEANICAS DE TRINDADE","INHANGUETA","ITARARE","JABOUR","JARDIM CAMBURI","JARDIM DA PENHA","JESUS DE NAZARETH","JOANA D'ARC","JUCUTUQUARA","MARIA ORTIZ","MARUIPE","MATA DA PRAIA","MONTE BELO","MORADA DE CAMBURI","MARIO CYPRESTE","NAZARETH","NOVA PALESTINA","PARQUE MOSCOSO","PARQUE RESIDENCIAL LARANJEIRAS","PENHA","PIEDADE","PONTAL DE CAMBURI","PRAIA DO CANTO","PRAIA DO SUA","REDENCAO","REPUBLICA","RESISTENCIA","ROMAO","SANTA CECILIA","SANTA CLARA","SANTA HELENA","SANTA LUIZA","SANTA LUCIA","SANTA MARTHA","SANTA TEREZA","SANTO ANDRE","SANTO ANTONIO","SANTOS DUMONT","SEGURANCA DO LAR","SOLON BORGES","SAO BENEDITO","SAO CRISTOVAO","SAO JOSE","SAO PEDRO","TABUAZEIRO","UNIVERSITARIO","VILA RUBIM"];
+
+const today = new Date().toISOString().split('T')[0];
+const nextWeek = new Date(Date.now()+7*86400000).toISOString().split('T')[0];
+document.getElementById('scheduled_date').value = today;
+document.getElementById('appointment_date').value = nextWeek;
+
+const nhSel = document.getElementById('neighbourhood');
+NH.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; nhSel.appendChild(o); });
+nhSel.value = 'JARDIM DA PENHA';
+
+document.querySelectorAll('.toggle-group').forEach(g => {
+  g.querySelectorAll('.toggle-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      g.querySelectorAll('.toggle-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+});
+
+document.querySelectorAll('.check-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    b.classList.toggle('active');
+    const box = b.querySelector('.box');
+    box.innerHTML = b.classList.contains('active') ? '&#10003;' : '';
+  });
+});
+
+const ageSlider = document.getElementById('age');
+document.getElementById('ageVal').textContent = ageSlider.value;
+ageSlider.addEventListener('input', () => { document.getElementById('ageVal').textContent = ageSlider.value; });
+
+document.getElementById('predictForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+  document.getElementById('resultArea').innerHTML = '<div class="result-empty"><span class="spinner" style="width:36px;height:36px;border-color:rgba(37,99,235,.3);border-top-color:#2563eb"></span><p style="margin-top:12px">Analyzing patient data...</p></div>';
+
+  const formData = {
+    gender: parseInt(document.querySelector('#genderGroup .active').dataset.value),
+    age: parseInt(ageSlider.value),
+    scholarship: document.querySelector('[data-key="scholarship"]').classList.contains('active') ? 1 : 0,
+    hypertension: document.querySelector('[data-key="hypertension"]').classList.contains('active') ? 1 : 0,
+    diabetes: document.querySelector('[data-key="diabetes"]').classList.contains('active') ? 1 : 0,
+    alcoholism: document.querySelector('[data-key="alcoholism"]').classList.contains('active') ? 1 : 0,
+    handicap: document.querySelector('[data-key="handicap"]').classList.contains('active') ? 1 : 0,
+    sms_received: document.querySelector('[data-key="sms_received"]').classList.contains('active') ? 1 : 0,
+    scheduled_date: document.getElementById('scheduled_date').value,
+    appointment_date: document.getElementById('appointment_date').value,
+    neighbourhood: nhSel.value,
+    previous_appointments: parseInt(document.getElementById('previous_appointments').value) || 0,
+    previous_no_shows: parseInt(document.getElementById('previous_no_shows').value) || 0,
+  };
+
+  try {
+    const res = await fetch('/predict', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(formData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Prediction failed');
+    renderResult(data);
+  } catch (err) {
+    document.getElementById('resultArea').innerHTML = `<div class="error-msg">${err.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Submit';
+  }
+});
+
+function renderResult(r) {
+  const pct = (r.probability * 100).toFixed(1);
+  const riskClass = r.risk_level === 'Low Risk' ? 'risk-low' : r.risk_level === 'Medium Risk' ? 'risk-medium' : 'risk-high';
+  const expClass = r.risk_level === 'Low Risk' ? 'exp-low' : r.risk_level === 'Medium Risk' ? 'exp-medium' : 'exp-high';
+  const gaugeColor = r.risk_level === 'Low Risk' ? '#22c55e' : r.risk_level === 'Medium Risk' ? '#f59e0b' : '#ef4444';
+  const expTitle = r.risk_level === 'Low Risk' ? 'Good News' : r.risk_level === 'Medium Risk' ? 'Caution Advised' : 'Action Required';
+  const gaugeOffset = 326.73 - (r.probability * 326.73);
+
+  let featRows = '';
+  Object.entries(r.features_used).forEach(([k, v]) => {
+    featRows += `<div class="feat-row"><span class="feat-key">${k}</span><span class="feat-val">${v}</span></div>`;
+  });
+
+  document.getElementById('resultArea').innerHTML = `
+    <div class="result-content">
+      <div class="risk-row">
+        <span class="risk-badge ${riskClass}">${r.risk_level}</span>
+        <div class="prob-pct"><div class="num">${pct}%</div><div class="lbl">No-Show Probability</div></div>
+      </div>
+      <div class="gauge">
+        <svg viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#e2e8f0" stroke-width="12"/>
+          <circle cx="60" cy="60" r="52" fill="none" stroke="${gaugeColor}" stroke-width="12" stroke-linecap="round"
+            stroke-dasharray="326.73" stroke-dashoffset="${gaugeOffset}"
+            style="transition: stroke-dashoffset 1s ease-out"/>
+        </svg>
+        <div class="gauge-labels"><span>0%</span><span>50%</span><span>100%</span></div>
+      </div>
+      <div class="explanation-box ${expClass}">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div><strong>${expTitle}</strong><p style="margin-top:4px">${r.explanation}</p></div>
+      </div>
+      <details><summary>View engineered features</summary><div class="features-panel">${featRows}</div></details>
+    </div>`;
+}
+</script>
+</body>
+</html>

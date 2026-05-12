@@ -1,11 +1,3 @@
-"""
-train_pipeline.py
------------------
-End-to-end pipeline runner: preprocessing → splits → tuning → evaluation.
-
-Usage:
-    python src/train_pipeline.py [path/to/KaggleV2-May-2016.csv]
-"""
 
 import sys
 import os

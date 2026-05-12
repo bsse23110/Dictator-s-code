@@ -1,22 +1,3 @@
-"""
-train.py
---------
-Loads the dataset, runs the preprocessing + feature engineering pipeline,
-splits the data, then trains and evaluates three baseline classifiers:
-
-  1. Logistic Regression
-  2. Random Forest
-  3. XGBoost
-
-Outputs a clean results table with AUC-ROC, F1, Precision, and Recall
-for each model.
-
-Usage
------
-    python train.py [path/to/KaggleV2-May-2016.csv]
-
-If no path is given, defaults to data/KaggleV2-May-2016.csv
-"""
 
 import sys
 import os

@@ -1,16 +1,3 @@
-"""
-preprocessing.py
-----------------
-Loads and cleans the Kaggle Medical Appointment No-Shows dataset.
-
-Steps performed:
-  1. Load raw CSV
-  2. Standardise column names (snake_case)
-  3. Parse datetime columns
-  4. Fix known data-quality issues (negative ages, invalid handicap levels)
-  5. Encode binary/categorical columns
-  6. Return a clean DataFrame ready for feature engineering
-"""
 
 import pandas as pd
 import numpy as np
