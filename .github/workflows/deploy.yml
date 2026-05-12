@@ -31,6 +31,7 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+
       - name: Create ECR repository if not exists
         run: |
           aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null || \
@@ -51,7 +52,7 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          cat > Dockerrun.aws.json <<EOF
+          cat > Dockerrun.aws.json <<EOF2
           {
             "AWSEBDockerrunVersion": "1",
             "Image": {
@@ -60,7 +61,7 @@ jobs:
             },
             "Ports": [{ "ContainerPort": 8000, "HostPort": 80 }]
           }
-          EOF
+          EOF2
 
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
@@ -73,10 +74,7 @@ jobs:
           version_label: ${{ github.sha }}
           region: ${{ env.AWS_REGION }}
           deployment_package: Dockerrun.aws.json
-          create_new_environment: true
-          environment_type: SingleInstance
-          instance_type: t2.micro
-          service_role: LabRole
+          use_existing_version_if_available: true
 
       - name: Print Deployed URL
         run: echo "🌐 http://noshow-prod-v2.us-east-1.elasticbeanstalk.com"
