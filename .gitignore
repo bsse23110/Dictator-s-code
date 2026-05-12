@@ -34,10 +34,6 @@ mlruns/
 # data/*.parquet
 
 # Model files
-models/*.pkl
-models/*.sav
-models/*.pt
-models/*.h5
 
 # Frontend (Node) dependencies and build artifacts
 frontend/node_modules/
